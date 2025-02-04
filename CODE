@@ -1,0 +1,64 @@
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+import joblib
+import streamlit as st
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from google.cloud import bigquery
+from google.oauth2 import service_account
+
+# Google Cloud authentication
+credentials = service_account.Credentials.from_service_account_file("gcp-key.json")
+client = bigquery.Client(credentials=credentials)
+
+# Querying Data from Google BigQuery
+def fetch_data():
+    query = """
+    SELECT * FROM `your_project.your_dataset.player_stats`
+    """
+    df = client.query(query).to_dataframe()
+    return df
+
+# Data Preprocessing
+def preprocess_data(df):
+    df.fillna(0, inplace=True)
+    X = df.drop(columns=['target'])  # Assuming 'target' is the column to predict
+    y = df['target']
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    return X_scaled, y, scaler
+
+# Model Training
+def train_model(X, y):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    return model
+
+# Save model and scaler
+def save_model(model, scaler):
+    joblib.dump(model, 'model.pkl')
+    joblib.dump(scaler, 'scaler.pkl')
+
+# Load model for prediction
+def load_model():
+    model = joblib.load('model.pkl')
+    scaler = joblib.load('scaler.pkl')
+    return model, scaler
+
+# Streamlit App for Predictions
+def main():
+    st.title("Prospect Predictions")
+    model, scaler = load_model()
+    
+    user_input = st.text_area("Enter player stats as comma-separated values")
+    if st.button("Predict"):
+        input_data = np.array(user_input.split(","), dtype=float).reshape(1, -1)
+        input_scaled = scaler.transform(input_data)
+        prediction = model.predict(input_scaled)
+        st.write(f"Predicted Value: {prediction[0]}")
+
+if __name__ == "__main__":
+    main()
